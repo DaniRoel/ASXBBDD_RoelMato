@@ -99,3 +99,38 @@ Get-DbaDatabase -SqlInstance $instancia -Database $Nombre
 Restore-DbaDatabase -SqlInstance $instancia -Path $destino -DestinationDataDirectory 'C:\BD Ejemplo' -WithReplace
 Restore-DbaDatabase -SqlInstance $instancia -Path $destino
 Get-DbaDatabase -SqlInstance $instancia -Database $Nombre
+
+#Procedimientos Almacenados.
+Invoke-Sqlcmd -Query "SELECT * FROM PRODUCTO" -ConnectionString "Data Source=.;Initial Catalog=Herboristeria;Integrated Security=True;TrustServerCertificate=True;ApplicationIntent=ReadOnly" | Format-Table -AutoSize
+Invoke-Sqlcmd -ServerInstance localhost -Database Herboristeria -Query "CAMBIAR_PRECIO @nuevoprecio = 10.50, @nombre = 'Miel de Romero'" -TrustServerCertificate
+Invoke-Sqlcmd -Query "SELECT * FROM PRODUCTO" -ConnectionString "Data Source=.;Initial Catalog=Herboristeria;Integrated Security=True;TrustServerCertificate=True;ApplicationIntent=ReadOnly" | Format-Table -AutoSize
+
+
+#SMO
+#Definimos variable para nuestro equipo
+$instanceName = "localhost"
+#Definimos variable para la instancia
+$server = New-Object -TypeName Microsoft.SqlServer.Management.Smo.Server -ArgumentList $instanceName
+
+# Consultamos las bases de datos de nuestra instancia.
+$server.Databases | Select Name, Status, Owner, CreateDate
+
+#Crear base de datos nueva
+$dbName = "Herboristeria_SMO"
+$creardb = New-Object -TypeName Microsoft.SqlServer.Management.Smo.Database($server, $dbName)
+$creardb.Create()
+# Consultamos las bases de datos de nuestra instancia.
+$server.Databases | Select Name, Status, Owner, CreateDate
+
+#Prueba de conexión
+$conectarse = Connect-DbaInstance -SqlInstance LOCALHOST -TrustServerCertificate
+Get-DbaDatabase -SqlInstance $conectarse -Database Herboristeria_SMO
+
+#Borrar la bbdd.
+$db = $server.Databases[$dbName]
+if ($db)
+{
+    $server.KillDatabase($dbName)   #se usa "kill" porque con drop daría error si existiese conexión
+}
+#Comprobar 
+$server.Databases | Select Name, Status, Owner, CreateDate
