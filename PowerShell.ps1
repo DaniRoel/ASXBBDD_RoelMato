@@ -134,3 +134,77 @@ if ($db)
 }
 #Comprobar 
 $server.Databases | Select Name, Status, Owner, CreateDate
+
+
+
+#ADO.NET
+#Crear variable con nombre de la base de datos
+$dbname = "Herboristeria_ADO.NET";
+    #Se crea la conexión con SQL
+$con = New-Object Data.SqlClient.SqlConnection;
+$con.ConnectionString = "Data Source=.;Initial Catalog=master;Integrated Security=True;";
+$con.open();
+    #Creamos la base de datos
+$sql = "CREATE DATABASE [$dbname];"
+$cmd = New-Object Data.SqlClient.SqlCommand $sql, $con;
+$cmd.ExecuteNonQuery();
+Write-Host "Database $dbname creada!";
+    #Cerramos y liberamos memoria
+$cmd.Dispose();
+$con.Close();
+$con.Dispose();
+
+#Eliminar BBDD
+$con = New-Object Data.SqlClient.SqlConnection;
+$con.ConnectionString = "Data Source=.;Initial Catalog=master;Integrated Security=True;";
+$con.open();
+$sqlCommand = New-Object Data.SqlClient.SqlCommand("DROP DATABASE [$dbname]", $con);
+$sqlCommand.ExecuteNonQuery()
+$cmd.Dispose();
+$con.Close();
+$con.Dispose();
+
+#TRY - CATCH
+try
+{
+    $connString = "Data Source=.;Database=Herboristeria;User ID=marga;Password=Abcd1234."
+    $conn = New-Object System.Data.SqlClient.SqlConnection $connString
+    $conn.Open()
+    if($conn.State -eq "Open")
+    {
+        Write-Host "Cadena de conexión exitosa. Conectado correctamente"
+        $conn.Close()
+    }
+}
+catch
+{
+    Write-Host "Error en la cadena de conexión. No se ha podido establecer la conexión"
+
+}
+$cmd.Dispose();
+$con.Close();
+$con.Dispose();
+
+#PROCEDIMIENTO ALMACENADO
+#Abrimos la cadena de conexión
+$SqlConn = New-Object System.Data.SqlClient.SqlConnection("Server = localhost; Database = Herboristeria; Integrated Security = True;")
+$SqlConn.Open()
+#Indicamos que vamos a utilizar el procedimiento almacenado "CAMBIAR_PRECIO"
+$cmd = $SqlConn.CreateCommand()
+$cmd.CommandType = 'StoredProcedure'
+$cmd.CommandText = 'dbo.CAMBIAR_PRECIO'
+
+# Damos valor al parametro de entrada @nombre
+$p1 = $cmd.Parameters.Add('@nombre',[System.Data.SqlDbType]::VarChar)
+$p1.ParameterDirection.Input
+$p1.Value = "Lavanda Seca"
+
+# Damos valor al parametro de entrada @nuevoprecio
+$p2 = $cmd.Parameters.Add('@nuevoprecio',[System.Data.SqlDbType]::Money)
+$p2.ParameterDirection.Input
+$p2.Value = '6,55'
+#Ejecutamos los cambios
+$results = $cmd.ExecuteReader()
+$dt = New-Object System.Data.DataTable
+$dt.Load($results)
+$SqlConn.Close()
