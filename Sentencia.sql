@@ -716,3 +716,310 @@ GO
 execute Exportar_imagen 'te', 'C:\PruebaExportar', 'te.jpg';
 GO
 
+
+-----------BBDD Contenida----------------
+
+EXEC SP_CONFIGURE 'show advanced options', 1 
+RECONFIGURE
+EXEC SP_CONFIGURE 'contained database authentication', 1
+RECONFIGURE
+GO
+
+DROP DATABASE IF EXISTS Herboristeria_contenida
+GO
+CREATE DATABASE Herboristeria_contenida
+CONTAINMENT=PARTIAL
+GO
+
+USE Herboristeria_contenida
+go
+DROP USER IF EXISTS Ainhoa
+CREATE USER Ainhoa 
+	WITH PASSWORD='Abcd1234.'
+GO
+ALTER ROLE db_owner
+ADD MEMBER Ainhoa
+GO
+GRANT CONNECT TO Ainhoa
+GO
+
+
+
+--------BLOB----------
+-- Añadimos una columna "imagen" a la tabla Producto
+ALTER TABLE PRODUCTO
+ADD imagen VARBINARY(MAX)
+GO
+-- Ahora insertaremos las imágenes.
+UPDATE PRODUCTO
+SET imagen = (SELECT BULKCOLUMN
+FROM OPENROWSET(BULK N'C:\ImagenesProductos\te_verde.jpg', SINGLE_BLOB) AS imagen)
+WHERE Producto.ID_Producto = 1;
+GO
+
+UPDATE PRODUCTO
+SET imagen = (SELECT BULKCOLUMN
+FROM OPENROWSET(BULK N'C:\ImagenesProductos\aceite.jpg', SINGLE_BLOB) AS imagen)
+WHERE Producto.ID_Producto = 2;
+GO
+
+UPDATE PRODUCTO
+SET imagen = (SELECT BULKCOLUMN
+FROM OPENROWSET(BULK N'C:\ImagenesProductos\miel_romero.jpg', SINGLE_BLOB) AS imagen)
+WHERE Producto.ID_Producto = 3;
+GO
+
+UPDATE PRODUCTO
+SET imagen = (SELECT BULKCOLUMN
+FROM OPENROWSET(BULK N'C:\ImagenesProductos\lavanda.jpg', SINGLE_BLOB) AS imagen)
+WHERE Producto.ID_Producto = 1004;
+GO
+
+UPDATE PRODUCTO
+SET imagen = (SELECT BULKCOLUMN
+FROM OPENROWSET(BULK N'C:\ImagenesProductos\curcuma.jpg', SINGLE_BLOB) AS imagen)
+WHERE Producto.ID_Producto = 1005;
+GO
+
+select * from Producto
+GO
+------FILESTREAM---------
+USE Herboristeria_contenida
+-- Creamos el filegroup
+ALTER DATABASE Herboristeria_contenida
+ADD FILEGROUP imagenes CONTAINS FILESTREAM;
+GO
+-- añadimos el fichero donde vamos a almacenar el filegroup (las imagenes)
+ALTER DATABASE [Herboristeria_contenida]
+ADD FILE (NAME='imagenes',
+FILENAME = 'C:\Imagenesfilename')
+TO FILEGROUP imagenes
+GO
+select * from sys.filegroups
+GO
+
+--Creamos la tabla.
+CREATE TABLE [dbo].[PRODUCTO](
+	[ID_Producto] [int] IDENTITY(1,1) NOT NULL,
+    [ID2] UNIQUEIDENTIFIER ROWGUIDCOL NOT NULL UNIQUE, 
+    [Imagen] VARBINARY(MAX) FILESTREAM,
+    [Nombre] [varchar](30) NOT NULL,
+	[Descripción] [varchar](250) NULL,
+	[Tipo] [varchar](255) NOT NULL,
+	[PrecioVenta] [money] NOT NULL,
+	[Propiedades] [varchar](250) NOT NULL,
+	[STOCK_ID_Stock] [int] NOT NULL)
+GO
+
+insert into PRODUCTO (ID2,Imagen,Nombre,Descripción,Tipo,PrecioVenta,Propiedades,STOCK_ID_Stock)
+SELECT NEWID(),BULKCOLUMN,'Té Verde','Hojas de té verde', 'Infusión', '5.50','relajante', 2
+	FROM OPENROWSET(BULK 'C:\ImagenesProductos\te_verde.jpg', SINGLE_BLOB) AS FOTO
+GO
+
+select * from PRODUCTO
+GO
+
+---------------------------------------
+-----FILETABLE--------------
+use master
+GO
+ALTER DATABASE [HerboristeriaDBA]
+SET FILESTREAM (DIRECTORY_NAME = 'imagenes')
+WITH ROLLBACK IMMEDIATE
+GO
+
+ALTER DATABASE [HerboristeriaDBA]
+SET FILESTREAM(NON_TRANSACTED_ACCESS = FULL,
+DIRECTORY_NAME = 'imagenes')
+WITH ROLLBACK IMMEDIATE
+GO
+
+ALTER DATABASE [HerboristeriaDBA]
+ADD FILEGROUP [FG_FileStream] CONTAINS FILESTREAM;
+GO
+
+ALTER DATABASE [HerboristeriaDBA]
+ADD FILE (
+    NAME = 'HerboristeriaDBA_imagenes',
+    FILENAME = 'C:\HerboristeriaDBA' -- Esta carpeta NO debe existir, SQL la crea
+)
+TO FILEGROUP [FG_FileStream];
+GO
+
+
+
+--Creamos la tabla
+CREATE TABLE Imagenes AS FileTable
+WITH
+(
+    FileTable_Directory = 'imagenes',
+    FileTable_Collate_Filename = database_default,
+    FILETABLE_STREAMID_UNIQUE_CONSTRAINT_NAME = UQ_stream_id
+);
+GO
+
+select * from imagenes
+GO
+
+
+/*
+-----------------------------------
+-----------------------------------
+--------- Particiones -------------
+-----------------------------------
+-----------------------------------
+*/
+-- 1. Crear directorio desde cmdshell.
+
+EXECUTE sp_configure 'xp_cmdshell', 1;
+GO
+RECONFIGURE;
+GO
+xp_cmdshell 'mkdir C:\Particiones\'
+GO
+
+-- 2. Crear la base de datos.
+CREATE DATABASE Herboristeria_particiones 
+	ON PRIMARY ( NAME = 'Herboristeria_particiones', 
+		FILENAME = 'C:\Particiones\Herboristeria_particiones.mdf' , 
+		SIZE = 15360KB , MAXSIZE = UNLIMITED, FILEGROWTH = 0) 
+	LOG ON ( NAME = 'Herboristeria_particiones_log', 
+		FILENAME = 'C:\Particiones\Herboristeria_particiones_log.ldf' , 
+		SIZE = 10176KB , MAXSIZE = 2048GB , FILEGROWTH = 10%) 
+GO
+
+-- 3. Crear filegroups.
+
+ALTER DATABASE [Herboristeria_particiones] ADD FILEGROUP [FG_Antiguos] 
+GO 
+ALTER DATABASE [Herboristeria_particiones] ADD FILEGROUP [FG_2022] 
+GO 
+ALTER DATABASE [Herboristeria_particiones] ADD FILEGROUP [FG_2023]  
+GO 
+ALTER DATABASE [Herboristeria_particiones] ADD FILEGROUP [FG_2024] 
+GO 
+ALTER DATABASE [Herboristeria_particiones] ADD FILEGROUP [FG_2025] 
+GO 
+
+-- 3. Crear nuevos archivos en la base de datos.
+ALTER DATABASE [Herboristeria_particiones] ADD FILE ( NAME = 'FG_Antiguos', FILENAME = 'c:\Particiones\FG_Antiguos.ndf', SIZE = 5MB, MAXSIZE = 100MB, FILEGROWTH = 2MB ) TO FILEGROUP [FG_Antiguos] 
+GO
+ALTER DATABASE [Herboristeria_particiones] ADD FILE ( NAME = 'FG_2022', FILENAME = 'c:\Particiones\FG_2022.ndf', SIZE = 5MB, MAXSIZE = 100MB, FILEGROWTH = 2MB ) TO FILEGROUP [FG_2022] 
+GO
+ALTER DATABASE [Herboristeria_particiones] ADD FILE ( NAME = 'FG_2023', FILENAME = 'c:\Particiones\FG_2023.ndf', SIZE = 5MB, MAXSIZE = 100MB, FILEGROWTH = 2MB ) TO FILEGROUP [FG_2023] 
+GO
+ALTER DATABASE [Herboristeria_particiones] ADD FILE ( NAME = 'FG_2024', FILENAME = 'c:\Particiones\FG_2024.ndf', SIZE = 5MB, MAXSIZE = 100MB, FILEGROWTH = 2MB ) TO FILEGROUP [FG_2024] 
+GO
+ALTER DATABASE [Herboristeria_particiones] ADD FILE ( NAME = 'FG_2025', FILENAME = 'c:\Particiones\FG_2025.ndf', SIZE = 5MB, MAXSIZE = 100MB, FILEGROWTH = 2MB ) TO FILEGROUP [FG_2025] 
+GO
+
+-- Comprobar
+SELECT file_id, name, physical_name 
+from sys.database_files
+go
+
+-- 4. Crear funcion de particion 
+CREATE PARTITION FUNCTION Fecha_ventas (datetime) 
+AS RANGE RIGHT 
+	FOR VALUES ('2022-01-01','2023-01-01') --SOLO 2 CORTES
+GO
+
+-- 5. Crear Esquema de particion
+CREATE PARTITION SCHEME Fecha_ventas 
+AS PARTITION Fecha_ventas                    
+TO (FG_Antiguos, FG_2022, FG_2023, FG_2024, FG_2025)
+GO
+
+-- 6. Crear tabla
+CREATE TABLE VENTA 
+    (
+     ID_Venta INTEGER IDENTITY(1,1) NOT NULL ,
+     Fecha_Venta DATETIME NOT NULL,
+          TRABAJADOR_DNI_Trabajador CHAR (9) NOT NULL , 
+     CLIENTE_DNI_Cliente CHAR (9) NOT NULL
+     )
+        on Fecha_ventas -- Nombre Función
+            (Fecha_Venta) -- Nombre Columna sobre la que divido
+GO
+
+-- Insertar datos para muestra. Generados por IA
+INSERT INTO VENTA (Fecha_Venta, TRABAJADOR_DNI_Trabajador, CLIENTE_DNI_Cliente)
+VALUES 
+    ('2021-12-31 23:59:00', '11111111A', 'CLIENTE01'),
+    ('2022-01-01 00:00:00', '22222222B', 'CLIENTE02'), 
+    ('2022-06-15 14:30:00', '33333333C', 'CLIENTE03'), 
+    ('2023-01-01 00:00:00', '44444444D', 'CLIENTE04'), 
+    ('2024-05-20 09:00:00', '55555555E', 'CLIENTE05'); 
+GO
+
+SELECT *,$Partition.Fecha_ventas(Fecha_Venta) AS Partition
+FROM VENTA
+GO
+
+select p.partition_number, p.rows from sys.partitions p 
+inner join sys.tables t 
+on p.object_id=t.object_id and t.name = 'Venta' 
+GO
+
+----- SPLIT -----
+ALTER PARTITION FUNCTION Fecha_ventas() 
+SPLIT RANGE ('2024-01-01'); 
+GO
+
+SELECT *,$Partition.Fecha_ventas(Fecha_Venta) AS Partition
+FROM VENTA
+GO
+
+select p.partition_number, p.rows from sys.partitions p 
+inner join sys.tables t 
+on p.object_id=t.object_id and t.name = 'Venta' 
+GO
+
+---- MERGE ----
+ALTER PARTITION FUNCTION Fecha_ventas()
+MERGE RANGE ('2022-01-01');
+GO
+
+SELECT *,$Partition.Fecha_ventas(Fecha_Venta) AS Partition
+FROM VENTA
+GO
+
+select p.partition_number, p.rows from sys.partitions p 
+inner join sys.tables t 
+on p.object_id=t.object_id and t.name = 'Venta' 
+GO
+
+---- SWTICH -----
+DROP TABLE IF EXISTS Archivo_Ventas 
+GO
+CREATE TABLE Archivo_Ventas 
+( 
+    ID_Venta INTEGER IDENTITY(1,1) NOT NULL,
+    Fecha_Venta DATETIME NOT NULL,
+    TRABAJADOR_DNI_Trabajador CHAR (9) NOT NULL, 
+    CLIENTE_DNI_Cliente CHAR (9) NOT NULL
+) 
+ON [FG_Antiguos]
+GO
+
+ALTER TABLE VENTA 
+SWITCH PARTITION 1 TO Archivo_Ventas
+GO
+
+select * from Archivo_Ventas
+Select * from VENTA
+GO
+
+---------- Truncate -------------
+
+SELECT *,$Partition.Fecha_ventas(Fecha_Venta) AS Partition
+FROM VENTA
+GO
+
+TRUNCATE TABLE VENTA 
+	WITH (PARTITIONS (3));
+GO
+
+SELECT *,$Partition.Fecha_ventas(Fecha_Venta) AS Partition
+FROM VENTA
+GO
