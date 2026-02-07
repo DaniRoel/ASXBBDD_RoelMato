@@ -1123,3 +1123,56 @@ GO
 SELECT * FROM PRODUCTO
 FOR SYSTEM_TIME CONTAINED IN ('2026-02-07 18:50:00', '2026-02-07 19:15:00')
 GO
+
+/*
+-----------------------------------
+-----------------------------------
+------ Tablas en memoria ----------
+-----------------------------------
+-----------------------------------
+*/
+
+USE MASTER
+GO
+-- Creamos FileGroup
+ALTER DATABASE Herboristeria
+ADD FILEGROUP tablas_memoria CONTAINS MEMORY_OPTIMIZED_DATA;
+GO
+
+-- Añadimos el archivo
+ALTER DATABASE Herboristeria
+ADD FILE (
+    NAME = 'tablas_memoria',
+    FILENAME = 'C:\BD DE EJEMPLO\tablas_memoria.ndf' 
+)
+TO FILEGROUP tablas_memoria;
+GO
+
+USE Herboristeria
+GO
+
+--CREAR TABLAS
+CREATE TABLE Ticket_Disco
+(
+    ID_ticket      INT IDENTITY(1,1) PRIMARY KEY,
+    ID_Trabajador  VARCHAR(9) NOT NULL DEFAULT '11111111D',
+    FechaEscaneo   DATETIME2 DEFAULT GETDATE()
+);
+GO
+
+CREATE TABLE Ticket_Memoria
+(
+    ID_ticket      INT IDENTITY(1,1) NOT NULL PRIMARY KEY NONCLUSTERED,
+    ID_Trabajador  VARCHAR(9) NOT NULL DEFAULT '11111111D',
+    FechaEscaneo   DATETIME2 DEFAULT GETDATE()
+)
+WITH (MEMORY_OPTIMIZED = ON, DURABILITY = SCHEMA_AND_DATA);
+GO
+
+--REALIZAR PRUEBAS DE RENDIMIENTO
+-- DISCO
+INSERT INTO Ticket_Disco DEFAULT VALUES;
+GO 10000
+-- Memoria
+INSERT INTO Ticket_Memoria DEFAULT VALUES;
+GO 10000
