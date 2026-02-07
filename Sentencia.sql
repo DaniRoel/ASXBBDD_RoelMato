@@ -1023,3 +1023,103 @@ GO
 SELECT *,$Partition.Fecha_ventas(Fecha_Venta) AS Partition
 FROM VENTA
 GO
+
+/*
+--------------------------------------------------
+--------------------------------------------------
+-------- Tabla temporal version sistema ----------
+--------------------------------------------------
+--------------------------------------------------
+*/
+USE Herboristeria
+GO
+-- Añadimos columnas a la tabla.
+Alter table PRODUCTO
+ADD 
+    SysStartTime datetime2 GENERATED ALWAYS AS ROW START NOT NULL DEFAULT SYSUTCDATETIME(),
+    SysEndTime datetime2 GENERATED ALWAYS AS ROW END NOT NULL DEFAULT CONVERT(datetime2, '9999-12-31 23:59:59.9999999'),
+    PERIOD FOR SYSTEM_TIME (SysStartTime, SysEndTime);
+GO
+-- "Empezamos a hacer el registro"
+ALTER TABLE PRODUCTO
+SET (SYSTEM_VERSIONING = ON (HISTORY_TABLE = dbo.producto_historico));
+GO
+-- Comprobamos estado
+select * from producto
+select * from producto_historico
+GO
+
+--Modificamos tabla principal
+UPDATE PRODUCTO
+SET PrecioVenta = 8.50
+WHERE ID_Producto = 1;
+GO
+
+UPDATE PRODUCTO
+SET Descripción = 'Aceite 100% natural para alivio muscular y golpes'
+WHERE ID_Producto = 2;
+GO
+
+INSERT INTO PRODUCTO (Nombre, Descripción, Tipo, PrecioVenta, Propiedades, STOCK_ID_Stock)
+VALUES ('Jabón de Caléndula', 'Jabón para pieles sensibles', 'Higiene', 5.20, 'Calmante, Reparador', 6);
+GO
+
+UPDATE PRODUCTO
+SET PrecioVenta = 11.25
+WHERE ID_Producto = 3;
+GO
+
+UPDATE PRODUCTO
+SET Descripción = 'Suplemento de curcumina de alta absorción con pimienta negra',
+    Propiedades = 'Antiinflamatorio, Digestivo, Antioxidante'
+WHERE ID_Producto = 1005;
+GO
+
+
+INSERT INTO PRODUCTO (Nombre, Descripción, Tipo, PrecioVenta, Propiedades, STOCK_ID_Stock)
+VALUES 
+('Champú Sólido Ortiga', 'Champú natural para cabello graso', 'Higiene', 8.95, 'Anticaspa, Equilibrante', 11),
+('Incienso de Copal', 'Resina natural de alta calidad', 'Aromaterapia', 4.50, 'Purificante, Relajante', 12),
+('Jengibre en Polvo', 'Raíz de jengibre molida ecológica', 'Alimento', 3.75, 'Digestivo, Calorífico', 13),
+('Serum Facial Vit-C', 'Concentrado iluminador', 'Cosmética', 22.00, 'Antiedad, Antioxidante', 14),
+('Extracto de Valeriana', 'Gotas para el sueño', 'Suplemento', 9.20, 'Sedante, Calmante', 15);
+GO
+--DEMOSTRACION.
+SELECT * FROM PRODUCTO
+WHERE ID_Producto = 1
+GO
+SELECT * FROM PRODUCTO_HISTORICO
+WHERE ID_Producto = 1
+GO
+
+DELETE FROM PRODUCTO
+WHERE ID_Producto = 1012
+GO
+
+SELECT * FROM PRODUCTO
+GO
+
+SELECT * FROM PRODUCTO_HISTORICO
+WHERE ID_Producto = 1012 
+GO
+
+--  TIPOS DE CONSULTA.
+-- AS OF
+SELECT * FROM PRODUCTO
+FOR SYSTEM_TIME AS OF '2026-02-07 18:52'
+GO
+-- FROM
+SELECT * FROM PRODUCTO
+FOR SYSTEM_TIME FROM '2026-02-07 19:15' TO '2026-02-07 19:30'
+GO
+
+-- BETWEEN
+SELECT * FROM PRODUCTO
+FOR SYSTEM_TIME BETWEEN '2026-02-07 19:04:00' AND '2026-02-07 19:10:00'
+WHERE ID_PRODUCTO = 3
+GO
+
+--CONTAINED IN
+SELECT * FROM PRODUCTO
+FOR SYSTEM_TIME CONTAINED IN ('2026-02-07 18:50:00', '2026-02-07 19:15:00')
+GO
